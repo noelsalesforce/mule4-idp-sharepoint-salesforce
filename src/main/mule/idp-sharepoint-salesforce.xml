@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:idp-idp-rental-agreement-110="http://www.mulesoft.org/schema/mule/idp-idp-rental-agreement-110" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:sharepoint="http://www.mulesoft.org/schema/mule/sharepoint" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/sharepoint http://www.mulesoft.org/schema/mule/sharepoint/current/mule-sharepoint.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/idp-idp-rental-agreement-110 http://www.mulesoft.org/schema/mule/idp-idp-rental-agreement-110/current/mule-idp-idp-rental-agreement-110.xsd">
+	<configuration-properties doc:name="Configuration properties" doc:id="28d41567-2f21-4467-9f21-926603a746e8" file="credentials.properties" />
+	<salesforce:sfdc-config name="Salesforce_Config_Manufacturing" doc:name="Salesforce Config" doc:id="393ef1a7-eae3-4522-94f2-3c069d7dbd83" >
+		<salesforce:basic-connection username="${sfdc.usernameManufacturing}" password="${sfdc.passwordManufacturing}" />
+	</salesforce:sfdc-config>
+	<sharepoint:sharepoint-online-config name="Sharepoint_Sharepoint_online" doc:name="Sharepoint Sharepoint online" doc:id="7a1f61b0-cb9f-494c-8eb7-847d7381dc51" >
+		<sharepoint:online-connection siteUrl="${sharepoint.siteUrl}" onlineUsername="${sharepoint.username}" onlinePassword="${sharepoint.password}" />
+	</sharepoint:sharepoint-online-config>
+	<idp-idp-rental-agreement-110:config name="IDP___IDP___Rental_Agreement___1_1_0_Config" doc:name="IDP - IDP - Rental Agreement - 1.1.0 Config" doc:id="8a5ac9b3-65d4-41bf-a0f8-2c1e735287d8" property_host="${idp.host}" property_port="${idp.port}" property_basePath="${idp.basePath}" property_protocol="${idp.protocol}" property_client-id="${idp.clientId}" property_client-secret="${idp.clientSecret}" />
+	<flow name="Flow-IDP" doc:id="bcc8768f-4ab5-4437-9baf-50fed96810b5" >
+		<sharepoint:created-objects doc:name="On New Objects" doc:id="2ad5dc27-89f0-4e2c-bc90-b99af46bc274" config-ref="Sharepoint_Sharepoint_online" objectType="FILE" path="%2FShared%20Documents%2F">
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+		</sharepoint:created-objects>
+		<ee:transform doc:name="Transform Message" doc:id="762912c7-1f67-4af5-9eaf-44b1f4f75aa6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload.Name]" doc:name="Set Variable" doc:id="eea07907-5071-450f-9442-3ab1983155b5" variableName="fileName"/>
+		<sharepoint:file-get-content doc:name="File get content" doc:id="5fbb333d-b180-46d7-90ee-5d8295b562b5" config-ref="Sharepoint_Sharepoint_online" fileServerRelativeUrl="#[payload.ServerRelativeUrl]"/>
+		<ee:transform doc:name="Transform Message" doc:id="c4b2df10-d83a-40aa-b2ff-cb8ddb8e3403" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload.^raw]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="871c8abd-c0ef-4cea-8dd8-bb8ee08c64fa" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import dw::module::Multipart
+import * from dw::core::Binaries
+input payload application/octet-stream
+output multipart/form-data boundary="---xxx---"
+---
+{
+	parts : {
+		file : {
+			headers : {
+				"Content-Disposition" : {
+					"name": "file",
+					"filename": vars.fileName default "" as String,
+					"subtype": "form-data"
+					},
+				"Content-Type" : "application/pdf"
+				},
+			content : payload
+			}
+		}
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<idp-idp-rental-agreement-110:postdocumentactionexecution doc:name="postDocumentActionExecution" doc:id="b41c4b89-0383-414d-991c-216266830bd7" config-ref="IDP___IDP___Rental_Agreement___1_1_0_Config" />
+		<until-successful maxRetries="50" doc:name="Until Successful-50/50" doc:id="fe01429c-45d3-4e94-8afa-7a6cdb7261f5" millisBetweenRetries="500">
+			<idp-idp-rental-agreement-110:getdocumentactionexecution doc:name="getDocumentActionExecution" doc:id="74db3ff9-b4b9-4b4c-8e3b-235a7e0a7327" config-ref="IDP___IDP___Rental_Agreement___1_1_0_Config" execution-id="#[payload.id]" />
+			<choice doc:name="Choice" doc:id="7e0c5b2a-c071-44c9-a4b8-013c0ab5e32a">
+				<when expression='#[payload.status != "IN_PROGRESS" and payload.status != "ACKNOWLEDGED"]'>
+					<set-variable value="#[payload.prompts.rental_information]" doc:name="Set Variable" doc:id="6186524d-5359-494c-bc02-9b56fa7ce361" variableName="rentalInformation" />
+					<ee:transform doc:name="Transform Message" doc:id="098bcdb8-e311-416e-851a-80ecc9d88be0">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	Id: "a1VHp00000OVijsMAD",
+	IDP_Document_Name__c: payload.documentName,
+	IDP_Document_Summary__c: payload.prompts.summary.answer.value,
+	IDP_Start_Date__c: payload.prompts.rental_start_date.answer.value,
+	IDP_End_Date__c: payload.prompts.rental_end_date.answer.value
+}]]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<salesforce:upsert objectType="Milestone1_Project__c" externalIdFieldName="Id" doc:name="Upsert" doc:id="23477899-ae6a-4106-8200-088d825242cc" config-ref="Salesforce_Config_Manufacturing" />
+				</when>
+				<otherwise>
+					<raise-error doc:name="Raise error" doc:id="6d407294-184f-41e3-8ebb-acf500b22650" type="IDP:IN_PROGRESS" description="IDP still in progress" />
+				</otherwise>
+			</choice>
+		</until-successful>
+		<ee:transform doc:name="Transform Message" doc:id="5ceb096d-ca76-4e1f-989a-e9a91dcf40b8">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
